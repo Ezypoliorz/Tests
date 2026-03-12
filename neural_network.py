@@ -1,73 +1,81 @@
+# A simple neural network test with PyTorch
+# Recognises numbers on the images of the PyTorch dataset
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torchvision
+import torchvision.transforms as transforms
+import random
+import matplotlib.pyplot as plt
 
-class NeuralNetwork(nn.Module) :
-    def __init__(self) :
-        super(NeuralNetwork, self).__init__()
+# Converts the images to Tensors, and normalizes the colors
+transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))])
 
-        # Defining the layers
-        self.hiddenLayer = nn.Linear(2, 4) # 2 inputs, 4 hidden neurons
+# Downloads the dataset
+trainSet = torchvision.datasets.MNIST(root='./data', train=True, download=True, transform=transform)
 
-        # Activating Sigmoid to introduce non-linearity
-        self.activation = nn.Sigmoid()
+# Loads the images by batches so teh RAM isn't saturated
+trainLoader = torch.utils.data.DataLoader(trainSet, batch_size=64, shuffle=True)
 
-        # Defining output layer
-        self.outputLayer = nn.Linear(4, 1) # 4 inputs (from the previous hidden layer), 1 output
-    
-    def forward(self, x) :
-        # Defining data forwarding
-        x = self.hiddenLayer(x)
-        x = self.activation(x)
-        x = self.outputLayer(x)
+class DigitClassifier(nn.Module) :
+    def __init__(self):
+        super(DigitClassifier, self).__init__()
+        # Flattens the image (28x28px) to a vector (784px)
+        self.flatten = nn.Flatten()
+        # Input layers : 784 neurons - Hidden layers : 128 neurons
+        self.fc1 = nn.Linear(784, 128)
+        # Activates the network
+        self.relu = nn.ReLU()
+        # Output layer : 10 values (0 to 9)
+        self.fc2 = nn.Linear(128, 10)
 
+    def forward(self, x):
+        x = self.flatten(x)
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
         return x
 
-model = NeuralNetwork()
+model = DigitClassifier()
 
-# Test data 1
-# We want [1, 0] to output 1, and [0, 1] to output 0
-X = torch.tensor([[1.0, 0.0], [0.0, 1.0]], dtype=torch.float32)
-Y = torch.tensor([[1.0], [0.0]], dtype=torch.float32)
+# Sets up the loss function and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-# Defining the loss function
-criteria = nn.MSELoss()
-
-# Defining the optimizer (Gradient descent : SGD)
-optimizer = optim.SGD(model.parameters(), lr=0.1) # lr : learning rate
-
-for step in range(1000) :
-    # Resetting the gradients
-    optimizer.zero_grad()
-
-    predictions = model(X)
-
-    # Calculating the loss
-    loss = criteria(predictions, Y)
-
-    # Calculating the gradients
-    loss.backward()
-
-    # Updating the weights
-    optimizer.step()
-
-    if step % 200 == 0:
-        print(f"Step {step}, Loss : {loss.item():.4f}")
-
-print("Training complete !")
-
-# Switching to evaluation mode
-model.eval()
-
-# Defining new data, never seen by the model
-newData = torch.tensor([[0.9, 0.1]], dtype=torch.float32)
-
-# Predicting the result without updating the gradient
-with torch.no_grad():
-    rawPrediction = model(newData)
+# Training loop
+print("Starting training...")
+for epoch in range(10) :
+    running_loss = 0.0
+    for images, labels in trainLoader:
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        running_loss += loss.item()
     
-# Interpretating the result
-finalResult = 1 if rawPrediction.item() > 0.5 else 0 # If the output is > 0.5, we consider it as class 1, else 0
+    print(f"Epoch {epoch+1} - Average loss : {running_loss/len(trainLoader):.4f}")
 
-print(f"Raw prediction (probability) : {rawPrediction.item():.4f}")
-print(f"Predicted class : {finalResult}")
+print("Traning done !")
+
+# Fetches the dataset for testing
+testSet = torchvision.datasets.MNIST(root='./data', train=False, download=True, transform=transform)
+testImage, realLabel = testSet[random.randint(0, len(testSet) - 1)]
+
+model.eval()
+with torch.no_grad():
+    rawPrediction = model(testImage.unsqueeze(0))
+    # Returns the index of the highest score (most probable)
+    predictedNumber = torch.argmax(rawPrediction, dim=1).item()
+
+visualizationImage = testImage * 0.5 + 0.5
+
+# Converts the tensor to a NumPy array, and removing the color
+visualizationImage = visualizationImage.numpy().squeeze()
+
+# Display
+plt.imshow(visualizationImage, cmap='gray')
+plt.title(f"Actual number : {realLabel} | Predicted : {predictedNumber}")
+plt.axis('off') # Hides the x and y axis
+plt.show()
