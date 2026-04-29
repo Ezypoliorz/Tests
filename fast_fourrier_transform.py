@@ -7,7 +7,7 @@ import sounddevice as sd
 from scipy.signal import find_peaks
 
 sampleRate = 44100 # Sample rate, in Hertz
-duration = 5 # Duration of the sound, in seconds
+duration = 3 # Duration of the sound, in seconds
 # Calculates the correct number of samples for the given duration
 numSamples = int(sampleRate * duration)
 t = np.linspace(0, duration, numSamples, endpoint = False)
